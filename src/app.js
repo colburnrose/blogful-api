@@ -6,6 +6,8 @@ const helmet = require("helmet");
 const winston = require("winston");
 const { v4: uuid } = require("uuid");
 const { NODE_ENV } = require("./config");
+const errorHandler = require("./errorHandler");
+const ArticlesService = require("./services/articles-service");
 
 const app = express();
 const morganConfiguration = NODE_ENV === "production" ? "tiny" : "common";
@@ -17,7 +19,7 @@ app.use(express.json());
 
 // authorization
 app.use(function validateBearerToken(req, res, next) {
-  const apiToken = process.env.API_SERVER_ENDPOINT;
+  const apiToken = process.env.API_TOKEN;
   const authToken = req.get("Authorization");
 
   if (!authToken || authToken.split(" ")[1] !== apiToken) {
@@ -27,26 +29,15 @@ app.use(function validateBearerToken(req, res, next) {
   next();
 });
 
-app.use(function errorHandler(error, req, res, next) {
-  let response = "";
-
-  // set up winston
-  const logger = winston.createLogger({
-    level: "info",
-    format: winston.format.json(),
-    transports: [new winston.transports.File({ filename: "info.log" })],
-  });
-
-  if (NODE_ENV === "production") {
-    logger.add(
-      new winston.transports.Console({
-        format: winston.format.simple(),
-      })
-    );
-  } else {
-    response = { error };
-  }
-  res.status(500).json(response);
+app.get("/articles", (req, res, next) => {
+  const knexInstance = req.app.get("db");
+  ArticlesService.getAllArticles(knexInstance)
+    .then((articles) => {
+      res.json(articles);
+    })
+    .catch(next);
 });
+
+app.use(errorHandler);
 
 module.exports = app;
