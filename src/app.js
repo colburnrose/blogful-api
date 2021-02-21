@@ -41,18 +41,15 @@ app.get("/articles", (req, res, next) => {
 
 // GET: Returns an articleById
 app.get("/articles/:article_id", (req, res, next) => {
-  // res.json({ request_id: req.params.article_id, this: "should fail" });
   const knexInstance = req.app.get("db");
   ArticlesService.getById(knexInstance, req.params.article_id)
     .then((article) => {
+      if (!article) {
+        return res.status(404).json({
+          error: { message: `Article does not exist` },
+        });
+      }
       res.json(article);
-      // res.json({
-      //   id: article.id,
-      //   title: article.title,
-      //   style: article.style,
-      //   content: article.content,
-      //   date_published: new Date(article.date_published),
-      // });
     })
     .catch(next);
 });
