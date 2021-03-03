@@ -1,0 +1,41 @@
+const express = require("express");
+const { isWebUri } = require("valid-url");
+const ArticlesService = require("../services/articles-service");
+const articleRouter = express.Router();
+const jsonParser = express.json();
+const xss = require("xss");
+
+articleRouter
+  .route("/")
+  .get((req, res, next) => {
+    ArticlesService.getAllArticles(req.app.get("db"))
+      .then((article) => {
+        res.json(article);
+      })
+      .catch(next);
+  })
+  .post(jsonParser, (req, res, next) => {
+    const { title, content, style } = req.body;
+    const newArticle = { title, content, style };
+    ArticlesService.insertArticle(req.app.get("db"), newArticle)
+      .then((article) => {
+        res.status(201).location(`/articles/${article.id}`).json(article);
+      })
+      .catch(next);
+  });
+
+articleRouter.route("/:article_id").get((req, res, next) => {
+  const knexInstance = req.app.get("db");
+  ArticlesService.getById(knexInstance, req.params.article_id)
+    .then((article) => {
+      if (!article) {
+        return res.status(404).json({
+          error: { message: `Article does not exist` },
+        });
+      }
+      res.json(article);
+    })
+    .catch(next);
+});
+
+module.exports = articleRouter;
