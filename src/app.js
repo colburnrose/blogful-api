@@ -19,6 +19,10 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/articles", articleRouter);
+app.get("/xss", (req, res) => {
+  res.cookie("secretToken", "1234567890");
+  res.sendFile(__dirname + "/xss-example.html");
+});
 
 // authorization
 // app.use(function validateBearerToken(req, res, next) {
