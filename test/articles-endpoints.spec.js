@@ -94,5 +94,25 @@ describe.only("Articles Endpoints", function () {
             .expect(postRes.body);
         });
     });
+
+    const reqFields = ["title", "content", "style"];
+
+    reqFields.forEach((field) => {
+      const newArticle = {
+        title: "Test new article",
+        style: "Listicle",
+        content: "Test new article content...",
+      };
+
+      it(`responds with 400 and an error message when the '${field}' is missing`, () => {
+        delete newArticle[field];
+        return supertest(app)
+          .post("/articles")
+          .send(newArticle)
+          .expect(400, {
+            error: { message: `Missing '${field}' in request body` },
+          });
+      });
+    });
   });
 });
