@@ -7,15 +7,18 @@ const winston = require("winston");
 const { v4: uuid } = require("uuid");
 const { NODE_ENV } = require("./config");
 const errorHandler = require("./errorHandler");
-const ArticlesService = require("./services/articles-service");
+const articleRouter = require("./routes/articles-router");
 
 const app = express();
+const jsonParser = express.json();
 const morganConfiguration = NODE_ENV === "production" ? "tiny" : "common";
 
 app.use(morgan(morganConfiguration));
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+app.use("/articles", articleRouter);
 
 // authorization
 // app.use(function validateBearerToken(req, res, next) {
@@ -28,31 +31,6 @@ app.use(express.json());
 //   }
 //   next();
 // });
-
-// GET: Returns a list of articles
-app.get("/articles", (req, res, next) => {
-  const knexInstance = req.app.get("db");
-  ArticlesService.getAllArticles(knexInstance)
-    .then((articles) => {
-      res.json(articles);
-    })
-    .catch(next);
-});
-
-// GET: Returns an articleById
-app.get("/articles/:article_id", (req, res, next) => {
-  const knexInstance = req.app.get("db");
-  ArticlesService.getById(knexInstance, req.params.article_id)
-    .then((article) => {
-      if (!article) {
-        return res.status(404).json({
-          error: { message: `Article does not exist` },
-        });
-      }
-      res.json(article);
-    })
-    .catch(next);
-});
 
 app.use(errorHandler);
 
