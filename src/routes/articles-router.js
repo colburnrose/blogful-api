@@ -4,7 +4,6 @@ const articleRouter = express.Router();
 const jsonParser = express.json();
 const xss = require("xss");
 const path = require("path");
-const { json } = require("express");
 
 const serializeArticle = (article) => ({
   id: article.id,
@@ -88,7 +87,7 @@ articleRouter
     }
 
     ArticlesService.updateArticle(db, req.params.article_id, articleToUpdate)
-      .then((updateRows) => {
+      .then((articleToUpdate) => {
         res.status(204).end();
       })
       .catch(next);
