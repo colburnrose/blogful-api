@@ -58,9 +58,16 @@ describe.only("Articles Endpoints", function () {
     });
 
     it(`responds with 401 Unauthorized for DELETE /articles/:id`, () => {
-      const aBookmark = testArticles[1];
+      const aArticle = testArticles[1];
       return supertest(app)
-        .delete(`/api/artticles/${aBookmark.id}`)
+        .delete(`/api/articles/${aArticle.id}`)
+        .expect(401, { error: "Unauthorized Request!" });
+    });
+
+    it(`responds with 401 Unauthorized for PATCH /articles/:id`, () => {
+      const aArticle = testArticles[1];
+      return supertest(app)
+        .patch(`/api/articles/${aArticle.id}`)
         .expect(401, { error: "Unauthorized Request!" });
     });
   });
@@ -227,6 +234,81 @@ describe.only("Articles Endpoints", function () {
           .then((res) => {
             supertest(app).get(`/articles`).expect(expectedArticle);
           });
+      });
+    });
+  });
+
+  describe.only(`PATCH, /api/articles/:article_id`, () => {
+    it(`responds with 404`, () => {
+      const articleId = 123456;
+      return supertest(app)
+        .patch(`/api/articles/${articleId}`)
+        .expect(404, { error: { message: `Article does not exist` } });
+    });
+
+    context("Given there are articles in the database", () => {
+      const testArticles = makeArticlesArray();
+      beforeEach("insert articles", () => {
+        return db.into("blogful_articles").insert(testArticles);
+      });
+
+      it("responds with 204 and updates the article", () => {
+        const idToUpdate = 2;
+        const updateArticle = {
+          title: "update article title",
+          style: "Interview",
+          content: "update article content",
+        };
+        const expectedArticle = {
+          ...testArticles[idToUpdate - 1],
+          ...updateArticle,
+        };
+        return supertest(app)
+          .patch(`/api/articles/${idToUpdate}`)
+          .send(updateArticle)
+          .expect(204)
+          .then((res) => {
+            supertest(app)
+              .get(`/api/articles/${idToUpdate}`)
+              .set("Authorization", `Bearer ${process.env.API_TOKEN}`)
+              .expect(expectedArticle);
+          });
+      });
+
+      it(`responds with 400 when no required fields supplied`, () => {
+        const idToUpdate = 2;
+        return supertest(app)
+          .patch(`/api/articles/${idToUpdate}`)
+          .send({ irrelevantField: "foo" })
+          .expect(400, {
+            error: {
+              message: `Request body must contain either 'title', 'style', or 'content'`,
+            },
+          });
+      });
+
+      it(`responds with 204 when updating only a subset of fields`, () => {
+        const idToUpdate = 2;
+        const updateArticle = {
+          title: "updated article title",
+        };
+        const expectedArticle = {
+          ...testArticles[idToUpdate - 1],
+          ...updateArticle,
+        };
+
+        return supertest(app)
+          .patch(`/api/articles/${idToUpdate}`)
+          .send({
+            ...updateArticle,
+            fieldToIgnore: "should not be in GET response",
+          })
+          .expect(204)
+          .then((res) =>
+            supertest(app)
+              .get(`/api/articles/${idToUpdate}`)
+              .expect(expectedArticle)
+          );
       });
     });
   });
