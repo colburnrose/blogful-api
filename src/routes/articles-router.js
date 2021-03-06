@@ -1,9 +1,9 @@
 const express = require("express");
-const { isWebUri } = require("valid-url");
 const ArticlesService = require("../services/articles-service");
 const articleRouter = express.Router();
 const jsonParser = express.json();
 const xss = require("xss");
+const path = require("path");
 
 const serializeArticle = (article) => ({
   id: article.id,
@@ -35,11 +35,11 @@ articleRouter
     }
 
     ArticlesService.insertArticle(req.app.get("db"), newArticle)
-      .then((article) => {
+      .then((newArticle) => {
         res
           .status(201)
-          .location(`/articles/${article.id}`)
-          .json(serializeArticle(article));
+          .location(path.posix.join(req.originalUrl, `/${newArticle.id}`))
+          .json(serializeArticle(newArticle));
       })
       .catch(next);
   });
@@ -68,19 +68,6 @@ articleRouter
       date_published: res.article.date_published,
     });
   })
-  //   .get((req, res, next) => {
-  //     const knexInstance = req.app.get("db");
-  //     ArticlesService.getById(knexInstance, req.params.article_id)
-  //       .then((article) => {
-  //         if (!article) {
-  //           return res.status(404).json({
-  //             error: { message: `Article does not exist` },
-  //           });
-  //         }
-  //         res.json(serializeArticle(article));
-  //       })
-  //       .catch(next);
-  //   })
   .delete((req, res, next) => {
     ArticlesService.deleteArticle(req.app.get("db"), req.params.article_id)
       .then(() => {

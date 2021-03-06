@@ -18,7 +18,7 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-app.use("/articles", articleRouter);
+app.use("/api/articles", articleRouter);
 app.get("/xss", (req, res) => {
   res.cookie("secretToken", "1234567890");
   res.sendFile(__dirname + "/xss-example.html");

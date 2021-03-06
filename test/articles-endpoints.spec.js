@@ -1,7 +1,6 @@
 require("dotenv").config();
 const { expect } = require("chai");
 const knex = require("knex");
-const { post } = require("../src/app");
 const app = require("../src/app");
 const {
   makeArticlesArray,
@@ -24,10 +23,52 @@ describe.only("Articles Endpoints", function () {
 
   afterEach("cleanup", () => db("blogful_articles").truncate());
 
-  describe("GET /articles", () => {
+  describe(`Unauthorized Requests.`, () => {
+    const testArticles = makeArticlesArray();
+
+    beforeEach("insert articles", () => {
+      return db.into("blogful_articles").insert(testArticles);
+    });
+
+    it(`responds with 401 Unauthorized for GET /articles`, () => {
+      return supertest(app)
+        .get(`/api/articles`)
+        .expect(401, { error: "Unauthorized Request!" });
+    });
+
+    it(`responds with 401 Unauthorized for POST /articles`, () => {
+      return supertest(app)
+        .post("/api/articles")
+        .send({
+          title: "Test article",
+          style: "New style",
+          content: "Some new conent",
+          date_published: new Date().toLocaleString("en", {
+            timeZone: "UTC",
+          }),
+        })
+        .expect(401, { error: "Unauthorized Request!" });
+    });
+
+    it(`responds with 401 Unauthorized for GET /articles/:id`, () => {
+      const aArticle = testArticles[1];
+      return supertest(app)
+        .get(`/api/articles/${aArticle.id}`)
+        .expect(401, { error: "Unauthorized Request!" });
+    });
+
+    it(`responds with 401 Unauthorized for DELETE /articles/:id`, () => {
+      const aBookmark = testArticles[1];
+      return supertest(app)
+        .delete(`/api/artticles/${aBookmark.id}`)
+        .expect(401, { error: "Unauthorized Request!" });
+    });
+  });
+
+  describe("GET /api/articles", () => {
     context(`Given no articles`, () => {
       it(`responds with 200 and an empty list`, () => {
-        return supertest(app).get("/ar`ticles").expect(200, []);
+        return supertest(app).get("/api/articles").expect(200, []);
       });
     });
 
@@ -39,17 +80,20 @@ describe.only("Articles Endpoints", function () {
       });
 
       it("responds with 200 and all of the articles", () => {
-        return supertest(app).get("/articles").expect(200);
+        return supertest(app)
+          .get("/api/articles")
+          .set("Authorization", `Bearer ${process.env.API_TOKEN}`)
+          .expect(200, testArticles);
       });
     });
   });
 
-  describe.only(`GET /articles/:article_id`, () => {
+  describe.only(`GET /api/articles/:article_id`, () => {
     context(`Given no articles`, () => {
       it(`responds with 400`, () => {
         const articleId = 123456;
         return supertest(app)
-          .get(`/articles/${articleId}`)
+          .get(`/api/articles/${articleId}`)
           .expect(404, { error: { message: `Article does not exist` } });
       });
     });
@@ -64,18 +108,14 @@ describe.only("Articles Endpoints", function () {
         const articleId = 2;
         const expectedArticle = testArticles[articleId - 1];
         return supertest(app)
-          .get(`/articles/${articleId}`)
+          .get(`/api/articles/${articleId}`)
+          .set("Authorization", `Bearer ${process.env.API_TOKEN}`)
           .expect(200, expectedArticle);
       });
     });
 
     context(`Given an XSS attack article`, () => {
-      const maliciousArticle = {
-        id: 911,
-        title: 'Naughty naughty very naughty <script>alert("xss");</script>',
-        style: "How-to",
-        content: `Bad image <img src="https://url.to.file.which/does-not.exist" onerror="alert(document.cookie);">. But not <strong>all</strong> bad.`,
-      };
+      const { maliciousArticle, expectedArticle } = makeMaliciousArticle();
 
       beforeEach("insert articles", () => {
         return db.into("blogful_articles").insert([maliciousArticle]);
@@ -83,21 +123,19 @@ describe.only("Articles Endpoints", function () {
 
       it("removes XSS attack content", () => {
         return supertest(app)
-          .get(`/articles/${maliciousArticle.id}`)
+          .get(`/api/articles/${maliciousArticle.id}`)
+          .set("Authorization", `Bearer ${process.env.API_TOKEN}`)
           .expect(200)
           .expect((res) => {
-            expect(res.body.title).to.eql(
-              'Naughty naughty very naughty &lt;script&gt;alert("xss");&lt;/script&gt;'
-            );
-            expect(res.body.content).to.eql(
-              `Bad image <img src="https://url.to.file.which/does-not.exist">. But not <strong>all</strong> bad.`
-            );
+            expect(res.body.style).to.eql(expectedArticle.style);
+            expect(res.body.title).to.eql(expectedArticle.title);
+            expect(res.body.content).to.eql(expectedArticle.content);
           });
       });
     });
   });
 
-  describe.only(`POST /articles`, () => {
+  describe.only(`POST /api/articles`, () => {
     it(`creates an article, responding with 201 and the new article`, () => {
       this.retries(3);
       const newArticle = {
@@ -106,21 +144,21 @@ describe.only("Articles Endpoints", function () {
         content: "Test new article content...",
       };
       return supertest(app)
-        .post("/articles")
+        .post("/api/articles")
         .send(newArticle)
         .expect((res) => {
           expect(res.body.title).to.eql(newArticle.title);
           expect(res.body.style).to.eql(newArticle.style);
           expect(res.body.content).to.eql(newArticle.content);
           expect(res.body).to.have.property("id");
-          expect(res.headers.location).to.eql(`/articles/${res.body.id}`);
+          expect(res.headers.location).to.eql(`/api/articles/${res.body.id}`);
           const expected = new Date().toLocaleString("en", { timeZone: "UTC" });
           const actual = new Date(res.body.date_published).toLocaleString();
           expect(actual).to.eql(expected);
         })
         .then((postRes) => {
           supertest(app)
-            .get(`/articles/${postRes.body.id}`)
+            .get(`/api/articles/${postRes.body.id}`)
             .expect(postRes.body);
         });
     });
@@ -137,33 +175,38 @@ describe.only("Articles Endpoints", function () {
       it(`responds with 400 and an error message when the '${field}' is missing`, () => {
         delete newArticle[field];
         return supertest(app)
-          .post("/articles")
+          .post("/api/articles")
           .send(newArticle)
           .expect(400, {
             error: { message: `Missing '${field}' in request body` },
           });
       });
-
-      it("removes XSS attack content from response", () => {
+      context("Given an  XSS attack article", () => {
         const { maliciousArticle, expectedArticle } = makeMaliciousArticle();
-        return supertest(app)
-          .post(`/articles`)
-          .send(maliciousArticle)
-          .expect(201)
-          .expect((res) => {
-            expect(res.body.title).to.eql(expectedArticle.title);
-            expect(res.body.content).to.eql(expectedArticle.content);
-          });
+        beforeEach("insert malicious article", () => {
+          return db.into("blogful_articles").insert([maliciousArticle]);
+        });
+
+        it("removes XSS attack content", () => {
+          return supertest(app)
+            .get(`/api/articles`)
+            .set("Authorization", `Bearer ${process.env.API_TOKEN}`)
+            .expect(200)
+            .expect((res) => {
+              expect(res.body[0].title).to.eql(expectedArticle.title);
+              expect(res.body[0].content).to.eql(expectedArticle.content);
+            });
+        });
       });
     });
   });
 
-  describe.only(`DELETE /articles/:article_id`, () => {
+  describe.only(`DELETE /api/articles/:article_id`, () => {
     context(`Given no articles`, () => {
       it(`responds with 404`, () => {
         const articleId = 123456;
         return supertest(app)
-          .delete(`/articles/${articleId}`)
+          .delete(`/api/articles/${articleId}`)
           .expect(404, { error: { message: `Article does not exist` } });
       });
     });
@@ -179,7 +222,7 @@ describe.only("Articles Endpoints", function () {
           (article) => article.id !== idToRemove
         );
         return supertest(app)
-          .delete(`/articles/${idToRemove}`)
+          .delete(`/api/articles/${idToRemove}`)
           .expect(204)
           .then((res) => {
             supertest(app).get(`/articles`).expect(expectedArticle);
